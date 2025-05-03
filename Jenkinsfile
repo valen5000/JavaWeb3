@@ -9,6 +9,15 @@ pipeline {
                 """
             }
         }
+        
+        stage('Build Artifact') {
+            steps {
+                sh"""
+                cd target
+                aws s3 cp WebAppCal-*.war s3://myproject1-bucketcalculator/
+                """
+            }
+        }
         stage('Deploy') {
             steps {
                 sh"""
