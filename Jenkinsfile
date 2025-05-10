@@ -1,47 +1,31 @@
 pipeline {
     agent any
-
     environment {
-        BUCKET_NAME = "myproject1-bucketcalculator"
+        IMAGE_NAME = "valen5000/javaweb3"
     }
-
     stages {
-        stage('Clean Old Artifacts') {
+        stage('Build WAR') {
             steps {
-                sh 'rm -rf target'
+                sh 'mvn clean package'
             }
         }
-
-        stage('Build') {
+        stage('Build Docker Image') {
             steps {
-                sh 'mvn package'
+                sh 'docker build -t $IMAGE_NAME .'
             }
         }
-
-        stage('Upload Artifact') {
+        stage('Push to Docker Hub') {
             steps {
-                script {
-                    // Find the WAR file
-                    def artifactName = sh(script: "cd target && ls WebAppCal-*.war", returnStdout: true).trim()
-
-                    // Set it as an environment variable
-                    env.ARTIFACT_NAME = artifactName
-
-                    // Upload to S3
-                    sh """
-                    cd target
-                    aws s3 cp ${artifactName} s3://${BUCKET_NAME}/
-                    """
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                    sh 'docker push $IMAGE_NAME'
                 }
             }
         }
-
-        stage('Deploy') {
+        stage('Run Container') {
             steps {
-                sh """
-                cd ansible
-                ansible-playbook -i aws_ec2.yml playbook.yml -e "BUCKET_NAME=${env.BUCKET_NAME} ARTIFACT_NAME=${env.ARTIFACT_NAME}"
-                """
+                sh 'docker rm -f javaweb3 || true'
+                sh 'docker run -d --name javaweb3 -p 8081:8080 $IMAGE_NAME'
             }
         }
     }
